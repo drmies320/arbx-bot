@@ -154,6 +154,9 @@ async function connectWallet() {
     var discBtn = document.getElementById('disconnectBtn');
     if (discBtn) discBtn.style.display = 'block';
 
+    // Fetch and display wallet balance
+    fetchWalletBalance(accounts[0]);
+
     // Enable buttons
     ['startBtn','scanBtn'].forEach(function(id){
       var el = document.getElementById(id);
@@ -221,6 +224,11 @@ function disconnectWallet() {
   var addrEl = document.getElementById('wAddr');
   if (addrEl) addrEl.textContent = '';
 
+  var balEl = document.getElementById('wBalance');
+  if (balEl) { balEl.textContent = ''; balEl.style.display = 'none'; }
+
+  if (window._balanceTimer) { clearInterval(window._balanceTimer); window._balanceTimer = null; }
+
   var discBtn = document.getElementById('disconnectBtn');
   if (discBtn) discBtn.style.display = 'none';
 
@@ -260,6 +268,49 @@ function disconnectWallet() {
     'warn'
   );
   setTimeout(hideWalletBanner, 5000);
+}
+
+// ── FETCH WALLET BALANCE ───────────────────────────────────
+async function fetchWalletBalance(address) {
+  try {
+    var balanceEl = document.getElementById('wBalance');
+    if (!balanceEl) return;
+
+    // Get balance in wei via eth_getBalance
+    var balHex = await window.ethereum.request({
+      method: 'eth_getBalance',
+      params: [address, 'latest']
+    });
+
+    // Convert hex wei to ETH
+    var balWei = parseInt(balHex, 16);
+    var balEth = balWei / 1e18;
+
+    // Format nicely
+    var balStr = balEth >= 1
+      ? balEth.toFixed(4) + ' ETH'
+      : balEth.toFixed(6) + ' ETH';
+
+    // Get USD value
+    var usdStr = '';
+    try {
+      var ep = typeof ethPrice !== 'undefined' ? ethPrice : 3200;
+      var usd = balEth * ep;
+      usdStr = ' ≈ $' + usd.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+    } catch(e) {}
+
+    balanceEl.textContent = '💰 ' + balStr + usdStr;
+    balanceEl.style.display = 'block';
+
+    // Refresh balance every 30 seconds
+    if (window._balanceTimer) clearInterval(window._balanceTimer);
+    window._balanceTimer = setInterval(function() {
+      if (window.wallet) fetchWalletBalance(window.wallet);
+    }, 30000);
+
+  } catch(e) {
+    console.warn('[ARBX] Balance fetch failed:', e.message);
+  }
 }
 
 // Auto-reconnect on load (after 1s to let MetaMask inject)
@@ -821,7 +872,10 @@ select option{background:#0b1929}
   </div>
   <div class="nav-right">
     <span id="netPill" class="net-pill off">⬤ DISCONNECTED</span>
-    <span id="wAddr" class="wallet-addr"></span>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
+      <span id="wAddr" class="wallet-addr"></span>
+      <span id="wBalance" style="font-family:'JetBrains Mono';font-size:11px;color:var(--green);display:none"></span>
+    </div>
     <button id="wBtn" class="wallet-btn" onclick="connectWallet()">🔗 Connect Wallet</button>
     <button id="disconnectBtn" class="disconnect-btn" onclick="disconnectWallet()">⏏ Disconnect</button>
   </div>
